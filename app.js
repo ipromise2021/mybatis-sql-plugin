@@ -16,6 +16,18 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const convertedSql = convertMybatisLog(rawLog, formatCheckbox.checked);
             sqlOutput.textContent = convertedSql || '未识别到有效的 MyBatis 语句 (请确保包含 Preparing: 和 Parameters: 关键字)';
+            // 自动复制到剪贴板
+            if (convertedSql) {
+                navigator.clipboard.writeText(convertedSql).then(() => {
+                    copyBtn.classList.add('copied');
+                    const originalText = copyBtn.textContent;
+                    copyBtn.textContent = '已复制';
+                    setTimeout(() => {
+                        copyBtn.textContent = originalText;
+                        copyBtn.classList.remove('copied');
+                    }, 1800);
+                }).catch(() => {});
+            }
         } catch (e) {
             sqlOutput.textContent = '解析出错: ' + e.message;
         }
@@ -24,6 +36,23 @@ document.addEventListener('DOMContentLoaded', () => {
     clearBtn.addEventListener('click', () => {
         logInput.value = '';
         sqlOutput.textContent = '转换后的 SQL 将显示在这里...';
+    });
+
+    // Ctrl+A 在输出区域内只选中 SQL 文本
+    const outputPre = document.getElementById('outputPre');
+    outputPre.addEventListener('click', () => sqlOutput.focus());
+    sqlOutput.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+            e.preventDefault();
+            const range = document.createRange();
+            range.selectNodeContents(sqlOutput);
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+        }
+    });
+    sqlOutput.addEventListener('focus', () => {
+        sqlOutput.style.outline = 'none';
     });
 
     copyBtn.addEventListener('click', () => {
