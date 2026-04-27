@@ -30,11 +30,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const textToCopy = sqlOutput.textContent;
         if (textToCopy && textToCopy !== '转换后的 SQL 将显示在这里...' && textToCopy !== '请输入 MyBatis 日志') {
             navigator.clipboard.writeText(textToCopy).then(() => {
+                copyBtn.classList.add('copied');
                 const originalText = copyBtn.textContent;
-                copyBtn.textContent = '已复制!';
+                copyBtn.textContent = '已复制';
                 setTimeout(() => {
                     copyBtn.textContent = originalText;
-                }, 2000);
+                    copyBtn.classList.remove('copied');
+                }, 1800);
             });
         }
     });
