@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MyBatis SQL 转换器 - 测试用例</title>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --panel: rgba(30,41,59,0.7);
+            --text: #f8fafc;
+            --muted: #94a3b8;
+            --green: #22c55e;
+            --red: #ef4444;
+            --yellow: #eab308;
+            --border: rgba(255,255,255,0.1);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            padding: 2rem;
+        }
+        h1 { font-size: 1.8rem; margin-bottom: 0.5rem; }
+        .summary {
+            display: flex; gap: 1.5rem; margin: 1.5rem 0;
+            font-size: 1.1rem;
+        }
+        .summary span { font-weight: 700; }
+        .summary .pass { color: var(--green); }
+        .summary .fail { color: var(--red); }
+        .test-case {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-left: 4px solid transparent;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+        .test-case.pass { border-left-color: var(--green); }
+        .test-case.fail { border-left-color: var(--red); }
+        .test-case .name { font-weight: 600; margin-bottom: 0.5rem; }
+        .test-case .name .badge {
+            display: inline-block; padding: 2px 8px; border-radius: 4px;
+            font-size: 0.75rem; margin-left: 0.5rem; font-weight: 700;
+        }
+        .badge.pass { background: rgba(34,197,94,0.2); color: var(--green); }
+        .badge.fail { background: rgba(239,68,68,0.2); color: var(--red); }
+        .test-case details { margin-top: 0.5rem; }
+        .test-case summary { cursor: pointer; color: var(--muted); font-size: 0.85rem; }
+        .test-case pre {
+            background: rgba(0,0,0,0.3);
+            padding: 0.75rem; border-radius: 6px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem; overflow-x: auto;
+            white-space: pre-wrap; word-break: break-all;
+            margin-top: 0.5rem;
+        }
+        .diff-line { color: var(--yellow); }
+    </style>
+</head>
+<body>
+<h1>MyBatis SQL 转换器 测试报告</h1>
+<div class="summary">
+    <div>总计: <span id="total">0</span></div>
+    <div>通过: <span class="pass" id="passCount">0</span></div>
+    <div>失败: <span class="fail" id="failCount">0</span></div>
+</div>
+<div id="results"></div>
+
+<script>
+// ========== 从 app.js 复制的核心函数 ==========
+function convertMybatisLog(logText, shouldFormat) {
+    const lines = logText.split('\n');
+    let preparingSql = '';
+    let pendingParams = null;
+    let resultSqls = [];
+    for (let i = 0; i < lines.length; i++) {
+        let line = lines[i];
+        if (line.includes('Preparing:')) {
+            if (preparingSql) {
+                let formattedSql = preparingSql;
+                if (shouldFormat) formattedSql = formatSql(formattedSql);
+                resultSqls.push(formattedSql + ';');
+            }
+            preparingSql = line.substring(line.indexOf('Preparing:') + 10).trim();
+            if (pendingParams !== null) {
+                let formattedSql = restoreSql(preparingSql, pendingParams);
+                if (shouldFormat) formattedSql = formatSql(formattedSql);
+                resultSqls.push(formattedSql + ';');
+                preparingSql = '';
+                pendingParams = null;
+            }
+        } else if (line.includes('Parameters:')) {
+            const paramsStr = line.substring(line.indexOf('Parameters:') + 11).trim();
+            if (preparingSql) {
+                let formattedSql = restoreSql(preparingSql, paramsStr);
+                if (shouldFormat) formattedSql = formatSql(formattedSql);
+                resultSqls.push(formattedSql + ';');
+                preparingSql = '';
+            } else {
+                pendingParams = paramsStr;
+            }
+        }
+    }
+    if (preparingSql) {
+       let formattedSql = preparingSql;
+       if (shouldFormat) formattedSql = formatSql(formattedSql);
+       resultSqls.push(formattedSql + ';');
+    }
+    return resultSqls.join('\n\n------------------------------------------------------------\n\n');
+}
+
+function restoreSql(sql, paramsStr) {
+    if (!paramsStr) return sql;
+    const params = parseMyBatisParams(paramsStr);
+    let result = '';
+    let paramIndex = 0;
+    for (let i = 0; i < sql.length; i++) {
+        if (sql[i] === '?') {
+            if (paramIndex < params.length) {
+                let p = params[paramIndex];
+                if (p.value === 'NULL') {
+                    result += 'NULL';
+                } else {
+                    result += p.needQuote ? `'${p.value}'` : p.value;
+                }
+                paramIndex++;
+            } else {
+                result += '?';
+            }
+        } else {
+            result += sql[i];
+        }
+    }
+    return result;
+}
+
+function parseMyBatisParams(paramString) {
+    if (!paramString || paramString.trim() === '') return [];
+    const params = [];
+    const quotedTypes = ['String', 'Timestamp', 'Date', 'Time', 'LocalDate', 'LocalTime', 'LocalDateTime', 'Char'];
+    let remaining = paramString.trim();
+    while (remaining.length > 0) {
+        if (/^null\s*(?:,|$)/i.test(remaining)) {
+            params.push({ value: 'NULL', needQuote: false });
+            remaining = remaining.replace(/^null\s*,?\s*/, '');
+            continue;
+        }
+        const typeRegex = /\(([a-zA-Z]+)\)(?=\s*(?:,|$))/g;
+        const match = typeRegex.exec(remaining);
+        if (!match) break;
+        const val = remaining.substring(0, match.index);
+        const type = match[1];
+        const needQuote = quotedTypes.includes(type);
+        params.push({ value: val, needQuote: needQuote });
+        remaining = remaining.substring(match.index + match[0].length);
+        remaining = remaining.replace(/^\s*,\s*/, '');
+    }
+    return params;
+}
+
+function formatSql(sql) {
+    const keywords = ['FROM', 'WHERE', 'AND', 'OR', 'ORDER BY', 'GROUP BY', 'LEFT JOIN', 'INNER JOIN', 'RIGHT JOIN', 'LIMIT', 'HAVING'];
+    let formatted = sql;
+    keywords.forEach(kw => {
+        const regex = new RegExp(`\\s+${kw}\\s+`, 'gi');
+        formatted = formatted.replace(regex, `\n${kw} `);
+    });
+    return formatted;
+}
+
+// ========== 测试框架 ==========
+const results = [];
+let passCount = 0;
+let failCount = 0;
+
+function test(name, input, expectedOutput, options = {}) {
+    const { format = false } = options;
+    const separator = '\n\n------------------------------------------------------------\n\n';
+    const actual = convertMybatisLog(input, format);
+    const actualStatements = actual.split(separator);
+
+    // 如果期望输出是数组，逐条比较；否则按整体比较
+    let pass;
+    if (Array.isArray(expectedOutput)) {
+        if (actualStatements.length !== expectedOutput.length) {
+            pass = false;
+        } else {
+            pass = expectedOutput.every((exp, idx) => {
+                const act = actualStatements[idx].trim();
+                const expTrimmed = exp.trim();
+                // 移除末尾分号进行比较（兼容有无分号）
+                const actClean = act.replace(/;$/, '');
+                const expClean = expTrimmed.replace(/;$/, '');
+                return actClean === expClean;
+            });
+        }
+    } else {
+        pass = actual.trim().replace(/;$/, '') === expectedOutput.trim().replace(/;$/, '');
+    }
+
+    if (pass) { passCount++; } else { failCount++; }
+    results.push({ name, input, expectedOutput, actual, pass, expectedArray: Array.isArray(expectedOutput) });
+}
+
+function renderResults() {
+    document.getElementById('total').textContent = results.length;
+    document.getElementById('passCount').textContent = passCount;
+    document.getElementById('failCount').textContent = failCount;
+
+    const container = document.getElementById('results');
+    results.forEach((r, idx) => {
+        const cls = r.pass ? 'pass' : 'fail';
+        const badgeLabel = r.pass ? 'PASS' : 'FAIL';
+        const div = document.createElement('div');
+        div.className = `test-case ${cls}`;
+        const expDisplay = r.expectedArray ? JSON.stringify(r.expectedOutput, null, 2) : r.expectedOutput;
+        div.innerHTML = `
+            <div class="name">#${idx + 1} ${r.name} <span class="badge ${cls}">${badgeLabel}</span></div>
+            <details>
+                <summary>查看详情</summary>
+                <div><strong>输入:</strong></div>
+                <pre>${escapeHtml(r.input)}</pre>
+                <div><strong>期望:</strong></div>
+                <pre>${escapeHtml(expDisplay)}</pre>
+                <div><strong>实际:</strong></div>
+                <pre>${escapeHtml(r.actual)}</pre>
+            </details>
+        `;
+        container.appendChild(div);
+    });
+}
+
+function escapeHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ========== 测试用例 ==========
+
+// --- SELECT ---
+test('SELECT 单参数 (Integer)',
+    '==>  Preparing: SELECT * FROM user WHERE id = ?\n==> Parameters: 1(Integer)',
+    'SELECT * FROM user WHERE id = 1;');
+
+test('SELECT 多参数混合类型',
+    '==>  Preparing: SELECT * FROM user WHERE name = ? AND age > ? AND status = ?\n==> Parameters: 张三(String), 18(Integer), active(String)',
+    "SELECT * FROM user WHERE name = '张三' AND age > 18 AND status = 'active';");
+
+test('SELECT NULL 参数',
+    '==>  Preparing: SELECT * FROM user WHERE email = ?\n==> Parameters: null',
+    'SELECT * FROM user WHERE email = NULL;');
+
+test('SELECT 多个 NULL 参数',
+    '==>  Preparing: SELECT * FROM user WHERE phone = ? AND address = ?\n==> Parameters: null, null',
+    'SELECT * FROM user WHERE phone = NULL AND address = NULL;');
+
+test('SELECT 长整型参数 (Long)',
+    '==>  Preparing: SELECT * FROM orders WHERE id = ?\n==> Parameters: 9999999999999(Long)',
+    'SELECT * FROM orders WHERE id = 9999999999999;');
+
+test('SELECT 浮点数 (Double)',
+    '==>  Preparing: SELECT * FROM product WHERE price > ?\n==> Parameters: 99.99(Double)',
+    'SELECT * FROM product WHERE price > 99.99;');
+
+test('SELECT BigDecimal 参数',
+    '==>  Preparing: SELECT * FROM account WHERE balance = ?\n==> Parameters: 100.50(BigDecimal)',
+    'SELECT * FROM account WHERE balance = 100.50;');
+
+test('SELECT 时间类型参数',
+    '==>  Preparing: SELECT * FROM log WHERE create_time > ? AND update_time < ?\n==> Parameters: 2024-01-01 00:00:00(Timestamp), 2024-12-31 23:59:59(Timestamp)',
+    "SELECT * FROM log WHERE create_time > '2024-01-01 00:00:00' AND update_time < '2024-12-31 23:59:59';");
+
+test('SELECT 日期类型参数',
+    '==>  Preparing: SELECT * FROM event WHERE event_date = ?\n==> Parameters: 2024-06-15(Date)',
+    "SELECT * FROM event WHERE event_date = '2024-06-15';");
+
+test('SELECT LocalDateTime 参数',
+    '==>  Preparing: SELECT * FROM schedule WHERE start_time >= ?\n==> Parameters: 2024-06-15T10:30:00(LocalDateTime)',
+    "SELECT * FROM schedule WHERE start_time >= '2024-06-15T10:30:00';");
+
+// --- INSERT ---
+test('INSERT 单行数据',
+    '==>  Preparing: INSERT INTO user (name, age, email) VALUES (?, ?, ?)\n==> Parameters: 李四(String), 25(Integer), lisi@test.com(String)',
+    "INSERT INTO user (name, age, email) VALUES ('李四', 25, 'lisi@test.com');");
+
+test('INSERT 包含 NULL',
+    '==>  Preparing: INSERT INTO user (name, phone) VALUES (?, ?)\n==> Parameters: 王五(String), null',
+    "INSERT INTO user (name, phone) VALUES ('王五', NULL);");
+
+test('INSERT 含特殊字符的字符串',
+    `==>  Preparing: INSERT INTO comment (content) VALUES (?)\n==> Parameters: 哈喽，这是一个包含"双引号"和'单引号'的评论！(String)`,
+    `INSERT INTO comment (content) VALUES ('哈喽，这是一个包含"双引号"和'单引号'的评论！');`);
+
+test('INSERT 含括号的值',
+    '==>  Preparing: INSERT INTO item (name, spec) VALUES (?, ?)\n==> Parameters: 商品A(String), 颜色:红(已确认)(String)',
+    "INSERT INTO item (name, spec) VALUES ('商品A', '颜色:红(已确认)');");
+
+test('INSERT 含百分号的值',
+    '==>  Preparing: INSERT INTO discount (rate) VALUES (?)\n==> Parameters: 50%(String)',
+    "INSERT INTO discount (rate) VALUES ('50%');");
+
+// --- UPDATE ---
+test('UPDATE 单参数',
+    '==>  Preparing: UPDATE user SET name = ? WHERE id = ?\n==> Parameters: 新名字(String), 100(Integer)',
+    "UPDATE user SET name = '新名字' WHERE id = 100;");
+
+test('UPDATE 多字段含时间',
+    '==>  Preparing: UPDATE order SET status = ?, update_time = ? WHERE id = ?\n==> Parameters: PAID(String), 2024-06-15 12:00:00(Timestamp), 500(Long)',
+    "UPDATE order SET status = 'PAID', update_time = '2024-06-15 12:00:00' WHERE id = 500;");
+
+test('UPDATE 所有值可为 NULL',
+    '==>  Preparing: UPDATE config SET value = ? WHERE key = ?\n==> Parameters: null, theme(String)',
+    "UPDATE config SET value = NULL WHERE key = 'theme';");
+
+// --- DELETE ---
+test('DELETE 单参数（硬删除）',
+    '==>  Preparing: DELETE FROM user WHERE id = ?\n==> Parameters: 999(Integer)',
+    'DELETE FROM user WHERE id = 999;');
+
+test('DELETE 多条件',
+    '==>  Preparing: DELETE FROM session WHERE user_id = ? AND expired = ?\n==> Parameters: 888(Long), true(Boolean)',
+    'DELETE FROM session WHERE user_id = 888 AND expired = true;');
+
+// --- 无参数 SQL ---
+test('无参数 SELECT（只有 Preparing，无 Parameters）',
+    '==>  Preparing: SELECT count(*) FROM user',
+    'SELECT count(*) FROM user;');
+
+test('无参数 DELETE（只有 Preparing）',
+    '==>  Preparing: DELETE FROM temp_log',
+    'DELETE FROM temp_log;');
+
+// --- 批量多条 SQL ---
+test('批量转换多条 SQL（混合 CRUD）',
+    `==>  Preparing: SELECT * FROM user WHERE id = ?
+==> Parameters: 1(Integer)
+==>  Preparing: UPDATE user SET name = ? WHERE id = ?
+==> Parameters: 测试用户(String), 1(Integer)
+==>  Preparing: SELECT count(*) FROM log
+==>  Preparing: INSERT INTO log (user_id, action) VALUES (?, ?)
+==> Parameters: 1(Integer), LOGIN(String)`,
+    [
+        'SELECT * FROM user WHERE id = 1;',
+        "UPDATE user SET name = '测试用户' WHERE id = 1;",
+        'SELECT count(*) FROM log;',
+        "INSERT INTO log (user_id, action) VALUES (1, 'LOGIN');"
+    ]);
+
+// --- 边界情况 ---
+test('空输入',
+    '',
+    '');
+
+test('只有空白字符的输入',
+    '   \n  \n  ',
+    '');
+
+test('无意义文本（没有 Preparing 关键字）',
+    '这是一段无关的日志\n2024-06-15 INFO Starting application',
+    '');
+
+test('日志行顺序错乱（Parameters 出现在 Preparing 之前）',
+    '==> Parameters: 1(Integer)\n==>  Preparing: SELECT * FROM user WHERE id = ?',
+    'SELECT * FROM user WHERE id = 1;');
+
+test('英文逗号分隔的参数（无空格）',
+    '==>  Preparing: SELECT * FROM user WHERE a = ? AND b = ?\n==> Parameters: 1(Integer),2(Integer)',
+    'SELECT * FROM user WHERE a = 1 AND b = 2;');
+
+test('参数中包含逗号和空格混合的字符串',
+    '==>  Preparing: INSERT INTO addr (detail) VALUES (?)\n==> Parameters: 浙江省, 杭州市, 西湖区(String)',
+    "INSERT INTO addr (detail) VALUES ('浙江省, 杭州市, 西湖区');");
+
+test('Preparing 行出现多次问号',
+    '==>  Preparing: SELECT * FROM t WHERE a IN (?, ?, ?) AND b = ?\n==> Parameters: 1(Integer), 2(Integer), 3(Integer), yes(String)',
+    "SELECT * FROM t WHERE a IN (1, 2, 3) AND b = 'yes';");
+
+test('负数参数',
+    '==>  Preparing: SELECT * FROM account WHERE balance < ?\n==> Parameters: -100(BigDecimal)',
+    'SELECT * FROM account WHERE balance < -100;');
+
+test('布尔类型参数',
+    '==>  Preparing: UPDATE user SET active = ? WHERE id = ?\n==> Parameters: true(Boolean), 1(Integer)',
+    'UPDATE user SET active = true WHERE id = 1;');
+
+// --- 格式化测试 ---
+test('格式化 - 在关键字前换行',
+    '==>  Preparing: SELECT * FROM user WHERE id = ? AND name = ? ORDER BY id LIMIT 10\n==> Parameters: 1(Integer), admin(String)',
+    "SELECT *\nFROM user\nWHERE id = 1\nAND name = 'admin'\nORDER BY id\nLIMIT 10;",
+    { format: true });
+
+test('格式化 - JOIN 语句',
+    '==>  Preparing: SELECT u.name, o.total FROM user u LEFT JOIN order o ON u.id = o.user_id WHERE o.total > ?\n==> Parameters: 100(Double)',
+    "SELECT u.name, o.total\nFROM user u\nLEFT JOIN order o ON u.id = o.user_id\nWHERE o.total > 100;",
+    { format: true });
+
+// --- 真实复杂 SQL（MySQL 变量、子查询、多 JOIN）---
+test('真实案例 - MySQL 变量 + 子查询 + 多 JOIN',
+    `==>  Preparing: select tt.*, IF ( @warehousecode = tt.warehouse_code, @rank := @rank + 1, @rank := 0 ) AS seq_no, @warehousecode := tt.warehouse_code AS warehouse_code from ( select t.*, t2.trans_company_id, t2.plan_no, t3.next_step from t_queue_dispatch_entry_queue t LEFT JOIN t_queue_dispatch_procure_deal t2 ON ( t.deal_id = t2.deal_id AND t.queue_type = t2.queue_type ) LEFT JOIN t_queue_dispatch_entry_queue_factory_record t3 ON ( t2.plan_no = t3.schedule_no ) where 1=1 AND t.warehouse_code = ? AND t.status in ('QUS010','QUS017') GROUP BY t.\`task_id\` ORDER BY t.queue_start_time ) tt,(SELECT @warehousecode := NULL, @rank := 0) q
+==> Parameters: 27291A1112(String)`,
+    "select tt.*, IF ( @warehousecode = tt.warehouse_code, @rank := @rank + 1, @rank := 0 ) AS seq_no, @warehousecode := tt.warehouse_code AS warehouse_code from ( select t.*, t2.trans_company_id, t2.plan_no, t3.next_step from t_queue_dispatch_entry_queue t LEFT JOIN t_queue_dispatch_procure_deal t2 ON ( t.deal_id = t2.deal_id AND t.queue_type = t2.queue_type ) LEFT JOIN t_queue_dispatch_entry_queue_factory_record t3 ON ( t2.plan_no = t3.schedule_no ) where 1=1 AND t.warehouse_code = '27291A1112' AND t.status in ('QUS010','QUS017') GROUP BY t.\`task_id\` ORDER BY t.queue_start_time ) tt,(SELECT @warehousecode := NULL, @rank := 0) q;");
+
+// --- SQL 关键字 / 保留字 ---
+test('参数值为 SQL 关键字样的字符串',
+    '==>  Preparing: SELECT * FROM config WHERE key = ?\n==> Parameters: FROM(String)',
+    "SELECT * FROM config WHERE key = 'FROM';");
+
+// --- 只有一条 Preparing，参数为空的边界情况 ---
+test('Parameters 行为空字符串',
+    '==>  Preparing: SELECT 1 FROM dual\n==> Parameters: ',
+    'SELECT 1 FROM dual;');
+
+// ========== 渲染结果 ==========
+renderResults();
+</script>
+</body>
+</html>

@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>mybatis log helper</title>
+    <link rel="stylesheet" href="index.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>mybatis log helper</h1>
+            <p>将包含 Preparing 和 Parameters 的日志转换为可执行的 SQL</p>
+        </header>
+
+        <main>
+            <div class="panel input-panel">
+                <div class="panel-header">
+                    <h2>原始日志</h2>
+                    <button id="clearBtn" class="btn secondary">清空</button>
+                </div>
+                <textarea id="logInput" placeholder="请粘贴完整的 MyBatis 日志，支持一次粘贴多条，例如：
+
+==>  Preparing: SELECT * FROM user WHERE id = ?
+==> Parameters: 1(Integer)"></textarea>
+            </div>
+
+            <div class="actions">
+                <button id="convertBtn" class="btn primary">
+                    <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path></svg>
+                    开始转换
+                </button>
+            </div>
+
+            <div class="panel output-panel">
+                <div class="panel-header">
+                    <h2>可执行 SQL</h2>
+                    <div class="output-actions">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="formatCheckbox" checked>
+                            简单排版
+                        </label>
+                        <button id="copyBtn" class="btn secondary">复制 SQL</button>
+                    </div>
+                </div>
+                <pre><code id="sqlOutput">转换后的 SQL 将显示在这里...</code></pre>
+            </div>
+        </main>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
