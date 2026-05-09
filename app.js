@@ -5,6 +5,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const clearBtn = document.getElementById('clearBtn');
     const copyBtn = document.getElementById('copyBtn');
     const formatCheckbox = document.getElementById('formatCheckbox');
+    const themeToggle = document.getElementById('themeToggle');
+
+    // 主题切换
+    const savedTheme = localStorage.getItem('theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+
+    themeToggle.addEventListener('click', () => {
+        const current = document.documentElement.getAttribute('data-theme');
+        const next = current === 'light' ? 'dark' : 'light';
+        document.documentElement.setAttribute('data-theme', next);
+        localStorage.setItem('theme', next);
+    });
 
     convertBtn.addEventListener('click', () => {
         const rawLog = logInput.value;

@@ -9,10 +9,41 @@
     --accent: #1e4a7a;
     --accent-glow: rgba(30, 74, 122, 0.3);
     --accent-hover: #2563eb;
+    --input-bg: rgba(0, 0, 0, 0.25);
+    --code-color: #d1d5db;
+    --btn-secondary-hover: rgba(255, 255, 255, 0.04);
+    --btn-secondary-hover-border: rgba(255, 255, 255, 0.12);
+    --checkbox-bg: rgba(255, 255, 255, 0.05);
+    --checkbox-hover-border: rgba(255, 255, 255, 0.2);
+    --scrollbar-thumb: rgba(255, 255, 255, 0.06);
+    --scrollbar-thumb-hover: rgba(255, 255, 255, 0.12);
+    --panel-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
     --font: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
     --mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
     --radius: 12px;
     --radius-sm: 7px;
+}
+
+[data-theme="light"] {
+    --bg: #f1f5f9;
+    --surface: #ffffff;
+    --border: rgba(0, 0, 0, 0.08);
+    --border-focus: rgba(30, 80, 160, 0.3);
+    --text: #1e293b;
+    --text-secondary: #64748b;
+    --text-muted: #94a3b8;
+    --accent: #1e4a7a;
+    --accent-glow: rgba(30, 74, 122, 0.15);
+    --accent-hover: #2563eb;
+    --input-bg: #f8fafc;
+    --code-color: #334155;
+    --btn-secondary-hover: rgba(0, 0, 0, 0.04);
+    --btn-secondary-hover-border: rgba(0, 0, 0, 0.12);
+    --checkbox-bg: rgba(0, 0, 0, 0.04);
+    --checkbox-hover-border: rgba(0, 0, 0, 0.2);
+    --scrollbar-thumb: rgba(0, 0, 0, 0.1);
+    --scrollbar-thumb-hover: rgba(0, 0, 0, 0.2);
+    --panel-shadow: 0 1px 6px rgba(0, 0, 0, 0.06);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -40,7 +71,34 @@ body {
 header {
     text-align: center;
     padding-bottom: 0.5rem;
+    position: relative;
 }
+
+.theme-toggle {
+    position: absolute;
+    right: 0;
+    top: 0;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    transition: all 0.2s ease;
+}
+.theme-toggle:hover {
+    color: var(--text);
+    border-color: var(--text-secondary);
+}
+.theme-toggle .icon-sun { display: none; }
+.theme-toggle .icon-moon { display: block; }
+
+[data-theme="light"] .theme-toggle .icon-sun { display: block; }
+[data-theme="light"] .theme-toggle .icon-moon { display: none; }
 header h1 {
     font-size: 1.65rem;
     font-weight: 700;
@@ -75,7 +133,7 @@ main {
     flex-direction: column;
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+    box-shadow: var(--panel-shadow);
     transition: border-color 0.25s ease;
 }
 .panel:focus-within {
@@ -101,7 +159,7 @@ main {
 textarea {
     flex: 1;
     min-height: 500px;
-    background: rgba(0, 0, 0, 0.25);
+    background: var(--input-bg);
     border: 1px solid transparent;
     border-radius: var(--radius-sm);
     padding: 1rem 1.1rem;
@@ -126,7 +184,7 @@ textarea::placeholder {
 pre {
     flex: 1;
     margin: 0;
-    background: rgba(0, 0, 0, 0.25);
+    background: var(--input-bg);
     border: 1px solid transparent;
     border-radius: var(--radius-sm);
     padding: 1rem 1.1rem;
@@ -137,7 +195,7 @@ code {
     font-family: var(--mono);
     font-size: 0.85rem;
     line-height: 1.7;
-    color: #d1d5db;
+    color: var(--code-color);
     white-space: pre-wrap;
     word-break: break-all;
 }
@@ -201,9 +259,9 @@ code {
     font-weight: 500;
 }
 .btn.secondary:hover {
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--btn-secondary-hover);
     color: var(--text);
-    border-color: rgba(255, 255, 255, 0.12);
+    border-color: var(--btn-secondary-hover-border);
 }
 
 /* ===== Output Actions ===== */
@@ -229,7 +287,7 @@ code {
     -webkit-appearance: none;
     width: 16px;
     height: 16px;
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--checkbox-bg);
     border: 1px solid var(--border);
     border-radius: 4px;
     cursor: pointer;
@@ -253,7 +311,7 @@ code {
     transform: rotate(45deg);
 }
 .checkbox-label:hover input[type="checkbox"] {
-    border-color: rgba(255, 255, 255, 0.2);
+    border-color: var(--checkbox-hover-border);
 }
 
 /* 复制成功反馈 */
@@ -270,8 +328,8 @@ textarea::-webkit-scrollbar-track,
 pre::-webkit-scrollbar-track { background: transparent; }
 textarea::-webkit-scrollbar-thumb,
 pre::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--scrollbar-thumb);
     border-radius: 3px;
 }
 textarea::-webkit-scrollbar-thumb:hover,
-pre::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.12); }
+pre::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
